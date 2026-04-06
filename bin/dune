@@ -1,0 +1,4 @@
+(executable
+ (public_name ccc)
+ (name main)
+ (libraries ccc))

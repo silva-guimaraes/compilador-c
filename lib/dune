@@ -1,0 +1,8 @@
+(library
+ (name ccc))
+
+(menhir
+ (modules parser))
+
+(ocamllex lexer)
+
