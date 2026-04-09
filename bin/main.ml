@@ -11,8 +11,11 @@ Opções:
 let dot_output = ref None
 let input_file = ref None
 
+let tokens_only = ref false
+
 let specs = [
-  "-dot", Arg.String (fun s -> dot_output := Some s), " Exporta AST como grafo .dot";
+  "-dot",    Arg.String (fun s -> dot_output := Some s), " Exporta AST como grafo .dot";
+  "-tokens", Arg.Set tokens_only,                        " Lista tokens reconhecidos";
 ]
 
 let () =
@@ -33,6 +36,14 @@ let read_input () =
         Buffer.add_channel buf stdin 4096
       done with End_of_file -> ());
       Buffer.contents buf
+
+let list_tokens src =
+  let lexbuf = Lexing.from_string src in
+  try while true do
+    let tok = Ccc.Lexer.token lexbuf in
+    if tok = Ccc.Parser.EOF then raise Exit;
+    Printf.printf "%s\n" (Ccc.Interface.string_of_token tok)
+  done with Exit | End_of_file -> ()
 
 (* ── DOT export ───────────────────────────────────────────────── *)
 
@@ -206,7 +217,9 @@ let export_dot (Programa decls) path =
 
 let () =
   let src = read_input () in
-  let ast = Ccc.Interface.parse src in
-  (match !dot_output with
-   | Some path -> export_dot ast path
-   | None -> print_string (Ccc.Ast.show_programa ast); print_newline ())
+  if !tokens_only then list_tokens src
+  else
+    let ast = Ccc.Interface.parse src in
+    (match !dot_output with
+     | Some path -> export_dot ast path
+     | None -> print_string (Ccc.Ast.show_programa ast); print_newline ())
