@@ -8,10 +8,29 @@ type bop =
   | Inc
   | Dec
 
-type stmt =
-  | Block
+
+type id = Id of string
 
 type expr =
-    | Word of string
+  | Var of id
+  | Bop of bop
 
-type programa = Programa of expr list
+type atributo = { tipo: id; nome: id }
+
+type struct2 = { nome: id; atributos: atributo list }
+
+type union = { nome: id; atributos: atributo list }
+
+type enum = { nome: id; lista: id list}
+
+type decl =
+  | Struct of struct2
+  | Union of union
+  | Enum of enum
+
+type stmt =
+  | VarDecl of id * id * expr
+
+type funcao = stmt list
+
+type programa = Programa of decl list

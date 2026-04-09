@@ -6,6 +6,8 @@ let digito = ['0'-'9']
 let sinal = ['-' '+']
 let alpha = ['a'-'z' 'A'-'Z']
 
+let macro = "#" [^ '\n']*
+
 let constante_int = sinal? digito+
 
 let exponente = ['e' 'E']
@@ -23,10 +25,50 @@ let espaco = [' ' '\t']+
    Em maiúsculo são os tokens que podem receber qualquer valor dado a tipagem correta. *)
 
 rule token = parse
+    (* *)
+    | '=' { ASSIGN }
+    | '{' { IDENT_INICIO }
+    | '}' { IDENT_FIM }
+    | ';' { PONTO_VIRGULA }
+    | ',' { VIRGULA }
+    (* reservados *)
+    | "auto" { AUTO }
+    | "break" { BREAK }
+    | "case" { CASE }
+    | "char" { CHAR }
+    | "const" { CONST }
+    | "continue" { CONTINUE }
+    | "default" { DEFAULT }
+    | "do" { DO }
+    | "double" { DOUBLE }
+    | "else" { ELSE }
+    | "enum" { ENUM }
+    | "extern" { EXTERN }
+    | "float" { FLOAT }
+    | "for" { FOR }
+    | "goto" { GOTO }
+    | "if" { IF }
+    | "int" { INT }
+    | "long" { LONG }
+    | "register" { REGISTER }
+    | "return" { RETURN }
+    | "short" { SHORT }
+    | "signed" { SIGNED }
+    | "sizeof" { SIZEOF }
+    | "static" { STATIC }
+    | "struct" { STRUCT }
+    | "switch" { SWITCH }
+    | "typedef" { TYPEDEF }
+    | "union" { UNION }
+    | "unsigned" { UNSIGNED }
+    | "void" { VOID }
+    | "volatile" { VOLATILE }
+    | "while" { WHILE }
+    (* =============== *)
+    | identificador { PALAVRA (Lexing.lexeme lexbuf)}
     | constante_float { CONSTANTE_FLOAT (float_of_string (Lexing.lexeme lexbuf)) }
     | constante_int { CONSTANTE_INT (int_of_string (Lexing.lexeme lexbuf)) }
-    | identificador { PALAVRA (Lexing.lexeme lexbuf)}
-    | espaco { token lexbuf }
+    | macro | espaco { token lexbuf }
     (* obrigatório *)
     | eof { EOF }
     | _ {raise (Failure ("Caractere não identificado: '" ^ Lexing.lexeme lexbuf ^ "'"))}

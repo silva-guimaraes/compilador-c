@@ -1,8 +1,12 @@
 (library
- (name ccc))
+ (name ccc)
+ (libraries menhirLib))
 
 (menhir
- (modules parser))
+ (modules parser)
+ (flags --inspection --table))
+
+
 
 (ocamllex lexer)
 

@@ -12,6 +12,8 @@ bug-reports: "https://github.com/username/reponame/issues"
 depends: [
   "dune" {>= "3.18"}
   "ocaml"
+  "ounit2"
+  "menhirLib"
   "odoc" {with-doc}
 ]
 build: [
