@@ -1,11 +1,11 @@
 (library
- (name ccc)
- (libraries menhirLib))
+  (name ccc)
+  (libraries menhirLib)
+  (preprocess (pps ppx_deriving.show ppx_expect)))
 
 (menhir
  (modules parser)
  (flags --inspection --table))
-
 
 
 (ocamllex lexer)

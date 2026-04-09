@@ -1,2 +1,5 @@
-(test
- (name test_ccc))
+(library
+  (name test_ccc)
+  (libraries ccc)
+  (inline_tests)
+  (preprocess (pps ppx_expect ppx_deriving.show)))

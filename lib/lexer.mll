@@ -29,8 +29,13 @@ rule token = parse
     | '=' { ASSIGN }
     | '{' { IDENT_INICIO }
     | '}' { IDENT_FIM }
-    | ';' { PONTO_VIRGULA }
+    | ';'* { PONTO_VIRGULA } (* trata vários como um só *)
     | ',' { VIRGULA }
+    | '(' { PAREN_INICIO }
+    | ')' { PAREN_FIM }
+    | '*' { ASTERISCO }
+    | '[' { COL_INICIO }
+    | ']' { COL_FIM }
     (* reservados *)
     | "auto" { AUTO }
     | "break" { BREAK }
