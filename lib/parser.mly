@@ -68,22 +68,29 @@ let decl :=
   | a = struct2; { Struct a }
   | a = union; { Union a }
   | a = enum; { Enum a }
-  | a = func_prototipo; { FuncProt a }
+  | a = func; { Func a }
+  | a = func_prototipo; PONTO_VIRGULA; { FuncProt a }
+
+let sinal :=
+  | UNSIGNED; { Some Unsigned }
+  | SIGNED; { Some Signed }
+  | { None }
 
 let var_decl :=
-  | a = tipo; b = ASTERISCO*; c = id;
+  | a = sinal; b = tipo; c = ASTERISCO*; d = id;
     { 
-      let count =  List.length b in
-      { tipo = a; nome = c; deref = count; array_len = None}
+      let count =  List.length c in
+      { sinal = a; tipo = b; nome = d; deref = count; array_len = None }
     }
-  | a = tipo; b = ASTERISCO*; c = id; COL_INICIO; d = CONSTANTE_INT; COL_FIM;
+  | a = sinal; b = tipo; c = ASTERISCO*; d = id;
+    COL_INICIO; e = CONSTANTE_INT; COL_FIM;
     { 
-      let count =  List.length b in
-      { tipo = a; nome = c; deref = count; array_len = Some d}
+      let count =  List.length c in
+      { sinal = a; tipo = b; nome = d; deref = count; array_len = Some e }
     }
 
 let stmt :=
-  | a = tipo; b = id; ASSIGN; c = expr; PONTO_VIRGULA; { VarDecl (a, b, c) }
+  | a = var_decl; ASSIGN; c = expr; PONTO_VIRGULA; { VarDeclInit (a, c) }
 
 let var_decl_list :=
   | a = var_decl; PONTO_VIRGULA; b = var_decl_list; { a :: b }
@@ -108,10 +115,16 @@ let enum :=
 let param_lista :=
   | a = var_decl; VIRGULA; b = param_lista; { a :: b }
   | a = var_decl; { [a] }
+  | { [] }
 
 let func_prototipo :=
-  | a = tipo; b = id; PAREN_INICIO; c = param_lista; PAREN_FIM; PONTO_VIRGULA;
+  | a = tipo; b = id; PAREN_INICIO; c = param_lista; PAREN_FIM;
     { { tipo = a; nome = b; parametros = c } }
+
+let func :=
+  | a = func_prototipo; IDENT_INICIO; IDENT_FIM; { { prototipo = a; corpo = []} }
+  | a = func_prototipo; IDENT_INICIO; d = stmt*; IDENT_FIM;
+    { { prototipo = a; corpo = d} }
 
 let tipo :=
   | INT; { Id "int" }
@@ -122,3 +135,4 @@ let tipo :=
 
 let expr :=
   | a = id; { Var a }
+  | a = CONSTANTE_INT; { Const (Int a) }
