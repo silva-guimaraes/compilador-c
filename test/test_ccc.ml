@@ -444,7 +444,7 @@ void printArray(int *arr, int size) {
                         quals = [] },
                       1,
                       (Ast.Call ((Ast.Id \"malloc\"),
-                         [(Ast.Bop (Ast.Mult, (Ast.Var (Ast.Id \"MAX\")),
+                         [(Ast.Bop (Ast.Mult, (Ast.Const (Ast.Int 100)),
                              (Ast.Sizeof
                                 { Ast.base = (Ast.Id \"int\"); sinal = None;
                                   tamanho = None; quals = [] })
@@ -724,3 +724,63 @@ void printArray(int *arr, int size) {
          ])"]
 ;;
 
+(* ── Testes de análise semântica ─────────────────────────────────── *)
+
+let check_and_print src =
+  let ast = Interface.parse src in
+  match Semant.check ast with
+  | Semant.Ok -> print_endline "OK"
+  | Semant.Errors errs ->
+      List.iter (fun (e : Semant.sem_error) ->
+        let s = match e.kind with
+          | Semant.UndeclaredVar  n -> "UndeclaredVar:" ^ n
+          | Semant.UndeclaredFunc n -> "UndeclaredFunc:" ^ n
+          | Semant.Redeclaration  n -> "Redeclaration:" ^ n
+          | Semant.ArityMismatch  a ->
+              Printf.sprintf "ArityMismatch:%s(expected %d got %d)"
+                a.fname a.expected a.got
+          | Semant.TypeMismatch   m ->
+              Printf.sprintf "TypeMismatch:%s" m.context
+        in
+        print_endline s
+      ) errs
+;;
+
+let%expect_test "programa limpo" =
+  check_and_print {|
+    int add(int a, int b);
+    int add(int a, int b) { return a + b; }
+    int main() { int r = add(1, 2); return r; }
+  |};
+  [%expect {| OK |}]
+;;
+
+let%expect_test "variável não declarada" =
+  check_and_print {| void f() { x = 1; } |};
+  [%expect {| UndeclaredVar:x |}]
+;;
+
+let%expect_test "tipo incompatível float→int" =
+  check_and_print {| void f() { int x; x = 3.14; } |};
+  [%expect {| TypeMismatch:atribuição |}]
+;;
+
+let%expect_test "variável fora de escopo" =
+  check_and_print {| void f() { { int x = 0; } x = 1; } |};
+  [%expect {| UndeclaredVar:x |}]
+;;
+
+let%expect_test "função não declarada" =
+  check_and_print {| void f() { foo(); } |};
+  [%expect {| UndeclaredFunc:foo |}]
+;;
+
+let%expect_test "aridade errada" =
+  check_and_print {| void g(int a, int b); void f() { g(1); } |};
+  [%expect {| ArityMismatch:g(expected 2 got 1) |}]
+;;
+
+let%expect_test "redeclaração" =
+  check_and_print {| void f() { int x; int x; } |};
+  [%expect {| Redeclaration:x |}]
+;;

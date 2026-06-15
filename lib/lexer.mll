@@ -5,6 +5,9 @@
     | 'n'  -> '\n'  | 't'  -> '\t'  | 'r'  -> '\r'
     | '\\' -> '\\'  | '\'' -> '\''  | '"'  -> '"'
     | '0'  -> '\000'| c    -> c
+
+  let macros : (string, token) Hashtbl.t = Hashtbl.create 8
+  let clear_macros () = Hashtbl.reset macros
 }
 
 let digito   = ['0'-'9']
@@ -12,7 +15,6 @@ let hexdig   = ['0'-'9' 'a'-'f' 'A'-'F']
 let alpha    = ['a'-'z' 'A'-'Z' '_']
 let alnum    = alpha | digito
 
-let macro    = "#" [^ '\n']*
 let int_dec  = digito+
 let int_hex  = "0x" hexdig+
 let int_oct  = '0' ['0'-'7']+
@@ -33,9 +35,9 @@ let newline  = '\n'
 rule token = parse
     (* Espaço e novas linhas *)
     | espaco   { token lexbuf }
-    | newline  { token lexbuf }
-    (* Macros e comentários de linha – descartados *)
-    | macro    { token lexbuf }
+    | newline  { Lexing.new_line lexbuf; token lexbuf }
+    (* Diretivas de pré-processador *)
+    | "#"  { hash_directive lexbuf }
     (* Comentário de bloco *)
     | "/*"     { block_comment lexbuf }
     (* Comentário de linha *)
@@ -118,7 +120,11 @@ rule token = parse
     | "while"    { WHILE }
     | "NULL"     { NULL_KW }
 
-    | id         { PALAVRA (Lexing.lexeme lexbuf) }
+    | id {
+        let s = Lexing.lexeme lexbuf in
+        match Hashtbl.find_opt macros s with
+        | Some tok -> tok
+        | None     -> PALAVRA s }
 
     | eof        { EOF }
     | _          { raise (Failure ("Caractere não identificado: '"
@@ -126,12 +132,12 @@ rule token = parse
 
 and block_comment = parse
     | "*/"  { token lexbuf }
-    | '\n'  { block_comment lexbuf }
+    | '\n'  { Lexing.new_line lexbuf; block_comment lexbuf }
     | _     { block_comment lexbuf }
     | eof   { raise (Failure "Comentário de bloco não fechado") }
 
 and line_comment = parse
-    | '\n'  { token lexbuf }
+    | '\n'  { Lexing.new_line lexbuf; token lexbuf }
     | _     { line_comment lexbuf }
     | eof   { EOF }
 
@@ -141,3 +147,46 @@ and str_lit buf = parse
     | [^ '"' '\\' '\n']+ as s { Buffer.add_string buf s; str_lit buf lexbuf }
     | '\n'              { raise (Failure "String literal com quebra de linha") }
     | eof               { raise (Failure "String literal não fechada") }
+
+and hash_directive = parse
+    | "define"  { define_or_skip lexbuf }
+    | _         { skip_to_newline lexbuf }
+    | '\n'      { Lexing.new_line lexbuf; token lexbuf }
+    | eof       { EOF }
+
+and define_or_skip = parse
+    | espaco+   { define_name lexbuf }
+    | _         { skip_to_newline lexbuf }   (* #defineXXX → ignora *)
+    | '\n'      { Lexing.new_line lexbuf; token lexbuf }
+    | eof       { EOF }
+
+and define_name = parse
+    | espaco+              { define_name lexbuf }
+    | id '('               { skip_to_newline lexbuf }   (* macro de função — ignora *)
+    | id as name           { define_value name lexbuf }
+    | '\n'                 { Lexing.new_line lexbuf; token lexbuf }
+    | eof                  { EOF }
+
+and define_value name = parse
+    | espaco+              { define_value name lexbuf }
+    | (int_hex | int_oct | int_dec) as s {
+        (match int_of_string_opt s with
+         | Some n -> Hashtbl.replace macros name (CONSTANTE_INT n)
+         | None   -> ());
+        skip_to_newline lexbuf }
+    | float_lit as s {
+        (match float_of_string_opt s with
+         | Some f -> Hashtbl.replace macros name (CONSTANTE_FLOAT f)
+         | None   -> ());
+        skip_to_newline lexbuf }
+    | id as s {
+        Hashtbl.replace macros name (PALAVRA s);
+        skip_to_newline lexbuf }
+    | '\n'                 { Lexing.new_line lexbuf; token lexbuf }
+    | _                    { skip_to_newline lexbuf }   (* valor complexo — ignora *)
+    | eof                  { EOF }
+
+and skip_to_newline = parse
+    | '\n'  { Lexing.new_line lexbuf; token lexbuf }
+    | _     { skip_to_newline lexbuf }
+    | eof   { EOF }

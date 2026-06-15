@@ -1,5 +1,6 @@
 
 let parse s =
+  Lexer.clear_macros ();
   let lexbuf = Lexing.from_string s in
   try
     Parser.programa Lexer.token lexbuf
@@ -99,6 +100,7 @@ let string_of_token = function
 ;;
 
 let list_tokens s =
+  Lexer.clear_macros ();
   let lexbuf = Lexing.from_string s in
   try while true do
     let tok = Lexer.token lexbuf in

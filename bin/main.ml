@@ -12,10 +12,12 @@ let dot_output = ref None
 let input_file = ref None
 
 let tokens_only = ref false
+let do_check    = ref false
 
 let specs = [
   "-dot",    Arg.String (fun s -> dot_output := Some s), " Exporta AST como grafo .dot";
   "-tokens", Arg.Set tokens_only,                        " Lista tokens reconhecidos";
+  "-check",  Arg.Set do_check,                           " Executa análise semântica";
 ]
 
 let () =
@@ -124,6 +126,9 @@ and dot_stmt parent s =
     | VarDeclInit (v, e) ->
         let id = node "VarDeclInit" in
         ignore (dot_var_decl id v); dot_expr id e; id
+    | MultiVarDecl vs ->
+        let id = node "MultiVarDecl" in
+        List.iter (fun v -> ignore (dot_var_decl id v)) vs; id
     | Expr e ->
         let id = node "Expr" in dot_expr id e; id
     | Return None     -> node "return"
@@ -197,8 +202,14 @@ let dot_decl parent d =
     | GlobalVarInit (v, e) ->
         let id = node "GlobalVarInit" in
         ignore (dot_var_decl id v); dot_expr id e; id
+    | GlobalMultiVar vs ->
+        let id = node "GlobalMultiVar" in
+        List.iter (fun v -> ignore (dot_var_decl id v)) vs; id
     | Typedef (t, d, Id n) ->
         node ("typedef\\n" ^ dot_tipo t d ^ " " ^ n)
+    | TopBlock ss ->
+        let id = node "TopBlock" in
+        List.iter (dot_stmt id) ss; id
   in
   edge parent id
 
@@ -215,11 +226,32 @@ let export_dot (Programa decls) path =
 
 (* ── Entry point ──────────────────────────────────────────────── *)
 
+let print_sem_error (e : Ccc.Semant.sem_error) =
+  let msg = match e.kind with
+    | Ccc.Semant.UndeclaredVar  s -> "variável não declarada: '" ^ s ^ "'"
+    | Ccc.Semant.UndeclaredFunc s -> "função não declarada: '"   ^ s ^ "'"
+    | Ccc.Semant.Redeclaration  s -> "redeclaração de '"         ^ s ^ "' no mesmo escopo"
+    | Ccc.Semant.ArityMismatch  a ->
+        Printf.sprintf "aridade errada em '%s': esperado %d arg(s), encontrado %d"
+          a.fname a.expected a.got
+    | Ccc.Semant.TypeMismatch   m ->
+        Printf.sprintf "tipos incompatíveis em %s: esperado '%s', encontrado '%s'"
+          m.context m.expected m.got
+  in
+  Printf.printf "Erro semântico: %s (%s)\n" msg e.hint
+
 let () =
   let src = read_input () in
   if !tokens_only then list_tokens src
   else
     let ast = Ccc.Interface.parse src in
-    (match !dot_output with
-     | Some path -> export_dot ast path
-     | None -> print_string (Ccc.Ast.show_programa ast); print_newline ())
+    if !do_check then begin
+      match Ccc.Semant.check ast with
+      | Ccc.Semant.Ok         -> print_endline "Análise semântica: OK"
+      | Ccc.Semant.Errors ers ->
+          List.iter print_sem_error ers;
+          exit 1
+    end else
+      (match !dot_output with
+       | Some path -> export_dot ast path
+       | None -> print_string (Ccc.Ast.show_programa ast); print_newline ())

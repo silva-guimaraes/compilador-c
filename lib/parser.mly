@@ -119,6 +119,13 @@ let var_decl :=
   | t = tipo; d = deref_count; n = id; dims = array_dim*;
     { { tipo = t; nome = n; deref = d; array_dims = dims } }
 
+(* Restante de uma lista de declaradores, após a vírgula:  *, b, c[5] *)
+let decl_rest :=
+  | d = deref_count; n = id; dims = array_dim*; VIRGULA; rest = decl_rest;
+    { (d, n, dims) :: rest }
+  | d = deref_count; n = id; dims = array_dim*;
+    { [(d, n, dims)] }
+
 (* ====================== Listas auxiliares ====================== *)
 
 let var_decl_list :=
@@ -183,10 +190,17 @@ let decl :=
   | a = enum;                                                { Enum a }
   | a = func;                                                { Func a }
   | p = func_prototipo; PONTO_VIRGULA;                       { FuncProt p }
+  (* Multi-declaração global: int x, *y; *)
+  | t = tipo; d0 = deref_count; n0 = id; dims0 = array_dim*; VIRGULA;
+    rest = decl_rest; PONTO_VIRGULA;
+    { let mk_var (d, n, dims) = { tipo = t; nome = n; deref = d; array_dims = dims } in
+      GlobalMultiVar (mk_var (d0, n0, dims0) :: List.map mk_var rest) }
   | v = var_decl; PONTO_VIRGULA;                             { GlobalVar v }
   | v = var_decl; ASSIGN; e = initializer_; PONTO_VIRGULA;   { GlobalVarInit (v, e) }
   | TYPEDEF; t = typedef_tipo; d = deref_count; n = id; PONTO_VIRGULA;
     { Typedef (t, d, n) }
+  (* Bloco solto no nível de arquivo (extensão para fragmentos de código) *)
+  | IDENT_INICIO; body = stmt*; IDENT_FIM;                   { TopBlock body }
 
 
 (* ====================== Statements ====================== *)
@@ -216,6 +230,15 @@ let typedef_base :=
 
 (* Statements que terminam com ';' *)
 let simple_stmt :=
+  (* Multi-declaração: int n, *i, arr[5]; *)
+  | t = tipo; d0 = deref_count; n0 = id; dims0 = array_dim*; VIRGULA; rest = decl_rest;
+    { let mk_var (d, n, dims) = { tipo = t; nome = n; deref = d; array_dims = dims } in
+      MultiVarDecl (mk_var (d0, n0, dims0) :: List.map mk_var rest) }
+  (* Multi-declaração com tipo definido por typedef: MyType n, *i; *)
+  | t_nome = PALAVRA; d0 = deref_count; n0 = id; VIRGULA; rest = decl_rest;
+    { let t = { base = Id t_nome; sinal = None; tamanho = None; quals = [] } in
+      let mk_var (d, n, dims) = { tipo = t; nome = n; deref = d; array_dims = dims } in
+      MultiVarDecl (mk_var (d0, n0, []) :: List.map mk_var rest) }
   | v = var_decl; ASSIGN; e = initializer_;      { VarDeclInit (v, e) }
   | v = var_decl;                                { VarDecl v }
   | RETURN; e = expr;                            { Return (Some e) }

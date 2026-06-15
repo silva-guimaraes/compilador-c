@@ -82,6 +82,7 @@ type func_prototipo = { tipo: tipo; deref: int; nome: id; parametros: var_decl l
 type stmt =
   | VarDecl of var_decl
   | VarDeclInit of var_decl * expr
+  | MultiVarDecl of var_decl list
   | Expr of expr
   | Return of expr option
   | Break
@@ -113,7 +114,9 @@ type decl =
   | Func of func
   | GlobalVar of var_decl
   | GlobalVarInit of var_decl * expr
+  | GlobalMultiVar of var_decl list
   | Typedef of tipo * int * id
+  | TopBlock of stmt list
 [@@deriving show]
 
 type programa = Programa of decl list
