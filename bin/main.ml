@@ -14,12 +14,14 @@ let input_file = ref None
 let tokens_only = ref false
 let do_check    = ref false
 let do_tac      = ref false
+let do_run      = ref false
 
 let specs = [
   "-dot",    Arg.String (fun s -> dot_output := Some s), " Exporta AST como grafo .dot";
   "-tokens", Arg.Set tokens_only,                        " Lista tokens reconhecidos";
   "-check",  Arg.Set do_check,                           " Executa análise semântica";
   "-tac",    Arg.Set do_tac,                             " Gera código intermediário de três endereços";
+  "-run",    Arg.Set do_run,                             " Executa o programa via interpretador TAC";
 ]
 
 let () =
@@ -247,15 +249,18 @@ let () =
   if !tokens_only then list_tokens src
   else
     let ast = Ccc.Interface.parse src in
-    if !do_check then begin
-      match Ccc.Semant.check ast with
-      | Ccc.Semant.Ok         -> print_endline "Análise semântica: OK"
-      | Ccc.Semant.Errors ers ->
-          List.iter print_sem_error ers;
-          exit 1
-    end else if !do_tac then
-      Ccc.Tac.generate ast |> Ccc.Tac.print_tac
-    else
-      (match !dot_output with
-       | Some path -> export_dot ast path
-       | None -> print_string (Ccc.Ast.show_programa ast); print_newline ())
+    (* Análise semântica sempre roda; aborta em caso de erro *)
+    (match Ccc.Semant.check ast with
+     | Ccc.Semant.Errors ers ->
+         List.iter print_sem_error ers;
+         exit 1
+     | Ccc.Semant.Ok ->
+         if !do_check then print_endline "Análise semântica: OK"
+         else if !do_tac then
+           Ccc.Tac.generate ast |> Ccc.Tac.print_tac
+         else if !do_run then
+           Ccc.Tac.generate ast |> Ccc.Interp.interpret
+         else
+           (match !dot_output with
+            | Some path -> export_dot ast path
+            | None -> print_string (Ccc.Ast.show_programa ast); print_newline ()))

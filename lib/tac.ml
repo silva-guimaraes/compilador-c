@@ -7,7 +7,7 @@ type place = string
 type label = string
 
 type instr =
-  | FuncBegin of string
+  | FuncBegin of string * string list  (* nome, params *)
   | FuncEnd
   | Label     of label
   | BinOp     of place * string * place * place   (* d := a op b *)
@@ -355,17 +355,17 @@ let gen_decl (ctx : ctx) (d : decl) : unit =
   match d with
   | Func f ->
       let (Id fname) = f.prototipo.nome in
-      emit ctx (FuncBegin fname);
-      (* reinicia contadores por função, mantendo a lista de código compartilhada *)
-      let saved_temp  = ctx.st.temp_n in
-      let saved_label = ctx.st.label_n in
-      ctx.st.temp_n  <- 0;
-      ctx.st.label_n <- 0;
+      let pnames = List.map (fun (v : Ast.var_decl) ->
+        let (Id n) = v.nome in n) f.prototipo.parametros in
+      emit ctx (FuncBegin (fname, pnames));
+      (* reinicia temporários por função (são frame-locais), mas NÃO os labels
+         (que são globais na tabela de saltos) *)
+      let saved_temp = ctx.st.temp_n in
+      ctx.st.temp_n <- 0;
       let ctx2 = { ctx with break_lbl = None; continue_lbl = None } in
       List.iter (gen_stmt ctx2) f.corpo;
       emit ctx (FuncEnd);
-      ctx.st.temp_n  <- saved_temp;
-      ctx.st.label_n <- saved_label
+      ctx.st.temp_n <- saved_temp
 
   | GlobalVar v ->
       let (Id nome) = v.nome in
@@ -384,16 +384,13 @@ let gen_decl (ctx : ctx) (d : decl) : unit =
       ) vs
 
   | TopBlock ss ->
-      emit ctx (FuncBegin "_toplevel");
-      let saved_temp  = ctx.st.temp_n in
-      let saved_label = ctx.st.label_n in
-      ctx.st.temp_n  <- 0;
-      ctx.st.label_n <- 0;
+      emit ctx (FuncBegin ("_toplevel", []));
+      let saved_temp = ctx.st.temp_n in
+      ctx.st.temp_n <- 0;
       let ctx2 = { ctx with break_lbl = None; continue_lbl = None } in
       List.iter (gen_stmt ctx2) ss;
       emit ctx (FuncEnd);
-      ctx.st.temp_n  <- saved_temp;
-      ctx.st.label_n <- saved_label
+      ctx.st.temp_n <- saved_temp
 
   | FuncProt _ | Struct _ | Union _ | Enum _ | Typedef _ -> ()
 
@@ -408,7 +405,8 @@ let generate (Programa decls) : instr list =
 (* ── Pretty-print ───────────────────────────────────────────────── *)
 
 let string_of_instr = function
-  | FuncBegin s          -> Printf.sprintf "function %s:" s
+  | FuncBegin (s, [])    -> Printf.sprintf "function %s:" s
+  | FuncBegin (s, ps)   -> Printf.sprintf "function %s(%s):" s (String.concat ", " ps)
   | FuncEnd              -> "end"
   | Label l              -> Printf.sprintf "%s:" l
   | Copy (d, s)          -> Printf.sprintf "  %s := %s" d s

@@ -811,7 +811,7 @@ let%expect_test "tac: aritmética aninhada" =
 let%expect_test "tac: if-else" =
   print_tac {| void f(int x, int y) { if (x) { y = 1; } else { y = 2; } } |};
   [%expect {|
-    function f:
+    function f(x, y):
       ifFalse x goto L0
       y := 1
       goto L1
@@ -824,7 +824,7 @@ let%expect_test "tac: if-else" =
 let%expect_test "tac: while" =
   print_tac {| void f(int i) { while (i < 10) { i++; } } |};
   [%expect {|
-    function f:
+    function f(i):
     L0:
       t0 := i < 10
       ifFalse t0 goto L1
@@ -838,7 +838,7 @@ let%expect_test "tac: while" =
 let%expect_test "tac: for" =
   print_tac {| void f(int n) { int s; s = 0; for (int i = 0; i < n; i++) { s = s + i; } } |};
   [%expect {|
-    function f:
+    function f(n):
       s := 0
       i := 0
     L0:
@@ -857,7 +857,7 @@ let%expect_test "tac: for" =
 let%expect_test "tac: break e continue" =
   print_tac {| void f(int i) { while (1) { if (i == 0) break; i--; } } |};
   [%expect {|
-    function f:
+    function f(i):
     L0:
       ifFalse 1 goto L1
       t0 := i == 0
@@ -874,7 +874,7 @@ let%expect_test "tac: break e continue" =
 let%expect_test "tac: chamada de função" =
   print_tac {| void f(int x) { int t; t = x + 1; printf("%d", t); } |};
   [%expect {|
-    function f:
+    function f(x):
       t0 := x + 1
       t := t0
       param "%d"
@@ -886,8 +886,86 @@ let%expect_test "tac: chamada de função" =
 let%expect_test "tac: return com valor" =
   print_tac {| int soma(int a, int b) { return a + b; } |};
   [%expect {|
-    function soma:
+    function soma(a, b):
       t0 := a + b
       return t0
     end |}]
+;;
+
+(* ── Testes do interpretador ─────────────────────────────────────── *)
+
+let run_prog input =
+  Tac.generate (Interface.parse input) |> Interp.interpret
+
+let%expect_test "interp: printf inteiro" =
+  run_prog {|
+    int main() { printf("%d\n", 2 + 3); return 0; }
+  |};
+  [%expect {| 5 |}]
+;;
+
+let%expect_test "interp: contagem com for" =
+  run_prog {|
+    int main() {
+      int i;
+      for (i = 1; i <= 3; i++) { printf("%d\n", i); }
+      return 0;
+    }
+  |};
+  [%expect {|
+    1
+    2
+    3 |}]
+;;
+
+let%expect_test "interp: chamada de função com retorno" =
+  run_prog {|
+    int soma(int a, int b) { return a + b; }
+    int main() { printf("%d\n", soma(3, 4)); return 0; }
+  |};
+  [%expect {| 7 |}]
+;;
+
+let%expect_test "interp: recursão fatorial" =
+  run_prog {|
+    int fat(int n) {
+      if (n <= 1) return 1;
+      return n * fat(n - 1);
+    }
+    int main() { printf("%d\n", fat(5)); return 0; }
+  |};
+  [%expect {| 120 |}]
+;;
+
+let%expect_test "interp: variável global" =
+  run_prog {|
+    int g = 10;
+    int main() { g = g + 5; printf("%d\n", g); return 0; }
+  |};
+  [%expect {| 15 |}]
+;;
+
+let%expect_test "interp: if-else" =
+  run_prog {|
+    int main() {
+      int x; x = 7;
+      if (x > 5) printf("maior\n"); else printf("menor\n");
+      return 0;
+    }
+  |};
+  [%expect {| maior |}]
+;;
+
+let%expect_test "interp: while com break" =
+  run_prog {|
+    int main() {
+      int i; i = 0;
+      while (1) { if (i >= 3) break; printf("%d\n", i); i++; }
+      return 0;
+    }
+  |};
+  [%expect {|
+    0
+    1
+    2 |}]
 ;;
