@@ -13,11 +13,13 @@ let input_file = ref None
 
 let tokens_only = ref false
 let do_check    = ref false
+let do_tac      = ref false
 
 let specs = [
   "-dot",    Arg.String (fun s -> dot_output := Some s), " Exporta AST como grafo .dot";
   "-tokens", Arg.Set tokens_only,                        " Lista tokens reconhecidos";
   "-check",  Arg.Set do_check,                           " Executa análise semântica";
+  "-tac",    Arg.Set do_tac,                             " Gera código intermediário de três endereços";
 ]
 
 let () =
@@ -251,7 +253,9 @@ let () =
       | Ccc.Semant.Errors ers ->
           List.iter print_sem_error ers;
           exit 1
-    end else
+    end else if !do_tac then
+      Ccc.Tac.generate ast |> Ccc.Tac.print_tac
+    else
       (match !dot_output with
        | Some path -> export_dot ast path
        | None -> print_string (Ccc.Ast.show_programa ast); print_newline ())

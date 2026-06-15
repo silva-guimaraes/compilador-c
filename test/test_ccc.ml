@@ -784,3 +784,110 @@ let%expect_test "redeclaração" =
   check_and_print {| void f() { int x; int x; } |};
   [%expect {| Redeclaration:x |}]
 ;;
+
+(* ── Testes TAC ──────────────────────────────────────────────────── *)
+
+let print_tac input =
+  Tac.generate (Interface.parse input) |> Tac.print_tac
+
+let%expect_test "tac: atribuição simples" =
+  print_tac {| void f() { int x; x = 5; } |};
+  [%expect {|
+    function f:
+      x := 5
+    end |}]
+;;
+
+let%expect_test "tac: aritmética aninhada" =
+  print_tac {| void f() { int a; a = 2 + 3 * 4; } |};
+  [%expect {|
+    function f:
+      t0 := 3 * 4
+      t1 := 2 + t0
+      a := t1
+    end |}]
+;;
+
+let%expect_test "tac: if-else" =
+  print_tac {| void f(int x, int y) { if (x) { y = 1; } else { y = 2; } } |};
+  [%expect {|
+    function f:
+      ifFalse x goto L0
+      y := 1
+      goto L1
+    L0:
+      y := 2
+    L1:
+    end |}]
+;;
+
+let%expect_test "tac: while" =
+  print_tac {| void f(int i) { while (i < 10) { i++; } } |};
+  [%expect {|
+    function f:
+    L0:
+      t0 := i < 10
+      ifFalse t0 goto L1
+      t1 := i
+      i := i + 1
+      goto L0
+    L1:
+    end |}]
+;;
+
+let%expect_test "tac: for" =
+  print_tac {| void f(int n) { int s; s = 0; for (int i = 0; i < n; i++) { s = s + i; } } |};
+  [%expect {|
+    function f:
+      s := 0
+      i := 0
+    L0:
+      t0 := i < n
+      ifFalse t0 goto L2
+      t1 := s + i
+      s := t1
+    L1:
+      t2 := i
+      i := i + 1
+      goto L0
+    L2:
+    end |}]
+;;
+
+let%expect_test "tac: break e continue" =
+  print_tac {| void f(int i) { while (1) { if (i == 0) break; i--; } } |};
+  [%expect {|
+    function f:
+    L0:
+      ifFalse 1 goto L1
+      t0 := i == 0
+      ifFalse t0 goto L2
+      goto L1
+    L2:
+      t1 := i
+      i := i - 1
+      goto L0
+    L1:
+    end |}]
+;;
+
+let%expect_test "tac: chamada de função" =
+  print_tac {| void f(int x) { int t; t = x + 1; printf("%d", t); } |};
+  [%expect {|
+    function f:
+      t0 := x + 1
+      t := t0
+      param "%d"
+      param t
+      t1 := call printf, 2
+    end |}]
+;;
+
+let%expect_test "tac: return com valor" =
+  print_tac {| int soma(int a, int b) { return a + b; } |};
+  [%expect {|
+    function soma:
+      t0 := a + b
+      return t0
+    end |}]
+;;
