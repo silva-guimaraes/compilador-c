@@ -356,10 +356,8 @@ let builtins : (string, value list -> value) Hashtbl.t =
     match args with
     | a :: b :: _ -> VFloat (Float.pow (to_float a) (to_float b))
     | _ -> VFloat 0.0);
-  add "scanf"   (fun args ->
-    (* lê uma linha e converte conforme o formato — simplificado *)
+  add "scanf"   (fun _ ->
     let line = try input_line stdin with End_of_file -> "" in
-    let _ = args in
     VInt (if String.length line > 0 then 1 else 0));
   t
 
@@ -384,6 +382,11 @@ let build_machine (instrs : instr list) : machine =
 
 (* ── Execução ────────────────────────────────────────────────────── *)
 
+let jump m l =
+  match Hashtbl.find_opt m.labels l with
+  | Some pc -> m.pc <- pc
+  | None    -> Printf.eprintf "Label não encontrado: '%s'\n" l
+
 let do_return m v_opt =
   match m.frames with
   | [] ->
@@ -396,21 +399,9 @@ let do_return m v_opt =
        | _ -> ())
 
 let do_call m dst fname n =
-  let nparams = List.length m.params in
-  let args =
-    if n <= nparams then
-      let skip = nparams - n in
-      let rec drop k = function x :: xs -> if k = 0 then x :: xs else drop (k-1) xs | [] -> [] in
-      let rec take k = function x :: xs -> if k = 0 then [] else x :: take (k-1) xs | [] -> [] in
-      let relevant = drop skip m.params in
-      m.params <- take skip m.params;
-      relevant
-    else begin
-      let args = m.params in
-      m.params <- [];
-      args
-    end
-  in
+  let skip = max 0 (List.length m.params - n) in
+  let args = List.filteri (fun i _ -> i >= skip) m.params in
+  m.params <- List.filteri (fun i _ -> i < skip) m.params;
   match Hashtbl.find_opt builtins fname with
   | Some f ->
       let result = f args in
@@ -503,22 +494,13 @@ let step m =
         let v = Option.map (eval_place m) v_opt in
         do_return m v
 
-    | Goto l ->
-        (match Hashtbl.find_opt m.labels l with
-         | Some pc -> m.pc <- pc
-         | None    -> Printf.eprintf "Label não encontrado: '%s'\n" l)
+    | Goto l -> jump m l
 
     | IfGoto (v, l) ->
-        if truthy (eval_place m v) then
-          (match Hashtbl.find_opt m.labels l with
-           | Some pc -> m.pc <- pc
-           | None    -> Printf.eprintf "Label não encontrado: '%s'\n" l)
+        if truthy (eval_place m v) then jump m l
 
     | IfFGoto (v, l) ->
-        if not (truthy (eval_place m v)) then
-          (match Hashtbl.find_opt m.labels l with
-           | Some pc -> m.pc <- pc
-           | None    -> Printf.eprintf "Label não encontrado: '%s'\n" l)
+        if not (truthy (eval_place m v)) then jump m l
 
     | Global (_, n) ->
         if not (Hashtbl.mem m.globals n) then
@@ -532,6 +514,10 @@ let step m =
   end
 
 (* ── Ponto de entrada ────────────────────────────────────────────── *)
+
+let enter_func m start_pc =
+  m.frames <- [{ locals = env_create (); ret_pc = Array.length m.instrs; ret_dst = None }];
+  m.pc <- start_pc + 1
 
 let interpret (instrs : instr list) : unit =
   let m = build_machine instrs in
@@ -551,15 +537,10 @@ let interpret (instrs : instr list) : unit =
   (* Chamar main *)
   (match Hashtbl.find_opt m.funcs "main" with
    | None ->
-       (* sem main: tentar _toplevel *)
        (match Hashtbl.find_opt m.funcs "_toplevel" with
         | None -> Printf.eprintf "Nenhuma função 'main' ou código toplevel encontrado\n"
-        | Some (start_pc, _) ->
-            m.frames <- [{ locals = env_create (); ret_pc = Array.length m.instrs; ret_dst = None }];
-            m.pc <- start_pc + 1)
-   | Some (start_pc, _) ->
-       m.frames <- [{ locals = env_create (); ret_pc = Array.length m.instrs; ret_dst = None }];
-       m.pc <- start_pc + 1);
+        | Some (start_pc, _) -> enter_func m start_pc)
+   | Some (start_pc, _) -> enter_func m start_pc);
   (try
      while m.running do step m done
    with

@@ -67,7 +67,7 @@ let rec infer_expr env e : S.ctype = match e with
   | Const Null      -> S.Pointer S.Void
 
   | Cast (t, d, e2) ->
-      ignore (infer_expr env e2);
+      check_expr env e2;
       S.ctype_of_tipo env.symtab t d
 
   | Sizeof _ -> S.Int
@@ -102,14 +102,14 @@ let rec infer_expr env e : S.ctype = match e with
       arith_result (infer_expr env a) (infer_expr env b)
 
   | Bop ((Eq|Neq|Lt|Gt|Le|Ge|And|Or), a, b) ->
-      ignore (infer_expr env a); ignore (infer_expr env b); S.Int
+      check_expr env a; check_expr env b; S.Int
 
   | Bop ((BitAnd|BitOr|BitXor|Shl|Shr), a, b) ->
-      ignore (infer_expr env a); ignore (infer_expr env b); S.Int
+      check_expr env a; check_expr env b; S.Int
 
   | Call (Id fname, args) ->
       let nargs = List.length args in
-      List.iter (fun a -> ignore (infer_expr env a)) args;
+      List.iter (check_expr env) args;
       (match S.lookup env.symtab fname with
        | Some { kind = S.Func { ret; arity }; _ } ->
            if arity >= 0 && nargs <> arity then
@@ -127,7 +127,7 @@ let rec infer_expr env e : S.ctype = match e with
            S.Unknown)
 
   | Index (e2, idx) ->
-      ignore (infer_expr env idx);
+      check_expr env idx;
       (match infer_expr env e2 with
        | S.Array inner | S.Pointer inner -> inner
        | S.Unknown                       -> S.Unknown
@@ -138,16 +138,18 @@ let rec infer_expr env e : S.ctype = match e with
              "operador []";
            S.Unknown)
 
-  | Member (e2, _) -> ignore (infer_expr env e2); S.Unknown
-  | Arrow  (e2, _) -> ignore (infer_expr env e2); S.Unknown
+  | Member (e2, _) -> check_expr env e2; S.Unknown
+  | Arrow  (e2, _) -> check_expr env e2; S.Unknown
 
   | Ternary (c, a, b) ->
-      ignore (infer_expr env c);
+      check_expr env c;
       arith_result (infer_expr env a) (infer_expr env b)
 
   | CompoundLit es ->
-      List.iter (fun e2 -> ignore (infer_expr env e2)) es;
+      List.iter (check_expr env) es;
       S.Unknown
+
+and check_expr env e = ignore (infer_expr env e)
 
 (* ── Statements ──────────────────────────────────────────────────── *)
 
@@ -171,7 +173,7 @@ and check_stmt env s = match s with
       List.iter (declare_var env) vs
 
   | Expr e ->
-      ignore (infer_expr env e)
+      check_expr env e
 
   | Return None ->
       if env.func_ret <> S.Void then
@@ -194,37 +196,37 @@ and check_stmt env s = match s with
       S.pop_scope env.symtab
 
   | If (c, t, el) ->
-      ignore (infer_expr env c);
+      check_expr env c;
       check_stmt env t;
       Option.iter (check_stmt env) el
 
   | While (c, s2) ->
-      ignore (infer_expr env c);
+      check_expr env c;
       check_stmt env s2
 
   | DoWhile (s2, c) ->
       check_stmt env s2;
-      ignore (infer_expr env c)
+      check_expr env c
 
   | For (init, cond, step, s2) ->
       S.push_scope env.symtab;
       (match init with
        | ForInitDecl (v, e_opt) ->
-           Option.iter (fun e -> ignore (infer_expr env e)) e_opt;
+           Option.iter (check_expr env) e_opt;
            declare_var env v
        | ForInitExpr e_opt ->
-           Option.iter (fun e -> ignore (infer_expr env e)) e_opt);
-      Option.iter (fun e -> ignore (infer_expr env e)) cond;
-      Option.iter (fun e -> ignore (infer_expr env e)) step;
+           Option.iter (check_expr env) e_opt);
+      Option.iter (check_expr env) cond;
+      Option.iter (check_expr env) step;
       check_stmt env s2;
       S.pop_scope env.symtab
 
   | Switch (e, s2) ->
-      ignore (infer_expr env e);
+      check_expr env e;
       check_stmt env s2
 
   | Case (e, ss) ->
-      ignore (infer_expr env e);
+      check_expr env e;
       List.iter (check_stmt env) ss
 
   | Default ss ->
@@ -250,10 +252,7 @@ and declare_var env (v : var_decl) =
 
 and check_decl env d = match d with
   | Func f ->
-      let (Id fname) = f.prototipo.nome in
       let ret = S.ctype_of_tipo env.symtab f.prototipo.tipo f.prototipo.deref in
-      ignore (S.declare env.symtab fname
-        (S.Func { ret; arity = List.length f.prototipo.parametros }));
       S.push_scope env.symtab;
       List.iter (declare_var env) f.prototipo.parametros;
       let saved = env.func_ret in
@@ -262,11 +261,7 @@ and check_decl env d = match d with
       env.func_ret <- saved;
       S.pop_scope env.symtab
 
-  | FuncProt p ->
-      let (Id fname) = p.nome in
-      let ret = S.ctype_of_tipo env.symtab p.tipo p.deref in
-      ignore (S.declare env.symtab fname
-        (S.Func { ret; arity = List.length p.parametros }))
+  | FuncProt _ -> ()
 
   | GlobalVar v ->
       declare_var env v
